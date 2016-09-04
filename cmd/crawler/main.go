@@ -29,7 +29,11 @@ func main() {
 		log.Panic(err)
 	}
 
-	c := crawler.New(*endpoint, *out)
+	c, err := crawler.New(*endpoint, *out)
+	if err != nil {
+		log.Panic(err)
+	}
+
 	c.IncludeSubDomains = *subdom
 	c.SaveWorkers = *workers
 	c.UploadWorkers = *workers

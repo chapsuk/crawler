@@ -35,6 +35,7 @@ type File interface {
 
 type Crawler struct {
 	endpoint string
+	mainURL  *url.URL
 	output   string
 
 	UploadWorkers     int
@@ -57,9 +58,17 @@ type Crawler struct {
 }
 
 // New return new Crawler instance
-func New(h, o string) *Crawler {
+func New(h, o string) (*Crawler, error) {
+	m, err := url.Parse(h)
+	if err != nil {
+		return nil, err
+	}
+	if m.Host == "" {
+		return nil, errors.New("empty main host")
+	}
 	return &Crawler{
 		endpoint:          h,
+		mainURL:           m,
 		output:            o,
 		saved:             make(map[string]bool),
 		visited:           make(map[string]bool),
@@ -81,7 +90,7 @@ func New(h, o string) *Crawler {
 				ExpectContinueTimeout: 1 * time.Second,
 			},
 		},
-	}
+	}, nil
 }
 
 // Run crawler proccess
@@ -355,25 +364,21 @@ func (c *Crawler) normalizeURL(u string) (string, error) {
 		return "", err
 	}
 
-	m, err := url.Parse(c.endpoint)
-	if err != nil {
-		return "", err
-	}
 	if t.Host == "" {
-		t.Host = m.Host
-		t.Scheme = m.Scheme
+		t.Host = c.mainURL.Host
+		t.Scheme = c.mainURL.Scheme
 	}
 	if t.Scheme == "" {
-		t.Scheme = m.Scheme
+		t.Scheme = c.mainURL.Scheme
 	}
 
 	// check doamin
 	if c.IncludeSubDomains {
-		if !strings.Contains(t.Host, m.Host) {
+		if !strings.Contains(t.Host, c.mainURL.Host) {
 			return "", errAnotherDomain
 		}
 	} else {
-		if t.Host != m.Host {
+		if t.Host != c.mainURL.Host {
 			return "", errAnotherDomain
 		}
 	}
@@ -389,11 +394,7 @@ func (c *Crawler) getOutputFileNameByURL(u string) (string, error) {
 	}
 
 	if t.Host == "" {
-		m, err := url.Parse(c.endpoint)
-		if err != nil {
-			return "", err
-		}
-		t.Host = m.Host
+		t.Host = c.mainURL.Host
 	}
 
 	if t.Path == "" {
