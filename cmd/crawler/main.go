@@ -29,12 +29,12 @@ func main() {
 		log.Panic(err)
 	}
 
-	c := crawler.New(*endpoint, *out, *resume)
+	c := crawler.New(*endpoint, *out)
 	c.IncludeSubDomains = *subdom
 	c.SaveWorkers = *workers
 	c.UploadWorkers = *workers
 	c.EnableGzip = *gzip
-	c.Run()
+	c.Run(*resume)
 }
 
 func createOutput(path string) error {

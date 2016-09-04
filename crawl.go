@@ -36,7 +36,6 @@ type File interface {
 type Crawler struct {
 	endpoint string
 	output   string
-	resume   bool
 
 	UploadWorkers     int
 	SaveWorkers       int
@@ -58,11 +57,10 @@ type Crawler struct {
 }
 
 // New return new Crawler instance
-func New(h, o string, r bool) *Crawler {
+func New(h, o string) *Crawler {
 	return &Crawler{
 		endpoint:          h,
 		output:            o,
-		resume:            r,
 		saved:             make(map[string]bool),
 		visited:           make(map[string]bool),
 		uploadPageCh:      make(chan string, 1024),
@@ -87,7 +85,7 @@ func New(h, o string, r bool) *Crawler {
 }
 
 // Run crawler proccess
-func (c *Crawler) Run() {
+func (c *Crawler) Run(resume bool) {
 	defer c.close()
 	c.runWorkers()
 	c.enqueUploadPage(c.endpoint)
@@ -255,30 +253,31 @@ func (c *Crawler) serveSave() {
 		}
 		path := c.output + name
 
-		var body []byte
+		// create dir if not exists
+		dir, _ := filepath.Split(path)
+		if _, err := os.Stat(dir); os.IsNotExist(err) {
+			err = os.MkdirAll(dir, 0744)
+			if err != nil {
+				log.Printf("craete dir: %s error: %s", dir, err)
+				c.wg.Done()
+				f.Free()
+				continue
+			}
+		}
+
 		if c.EnableGzip {
 			path += ".gz"
 			var b bytes.Buffer
 			w := gzip.NewWriter(&b)
 			w.Write(f.GetBody())
 			w.Close()
-			body = b.Bytes()
+			err = ioutil.WriteFile(path, b.Bytes(), 0666)
 		} else {
-			body = f.GetBody()
+			err = ioutil.WriteFile(path, f.GetBody(), 0666)
 		}
 
-		err = ioutil.WriteFile(path, body, 0666)
 		if err != nil {
-			dir, _ := filepath.Split(path)
-			err = os.MkdirAll(dir, 0744)
-			if err != nil {
-				log.Printf("craete dir: %s error: %s", dir, err)
-			} else {
-				err = ioutil.WriteFile(path, body, 0666)
-				if err != nil {
-					log.Printf("write file error: %s", err)
-				}
-			}
+			log.Printf("wrte file error: %s", err)
 		}
 
 		c.wg.Done()
