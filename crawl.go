@@ -341,12 +341,15 @@ func (c *Crawler) isSaved(url string) bool {
 }
 
 func (c *Crawler) normalizeURL(u string) (string, error) {
+	u = strings.TrimSpace(strings.Trim(u, "\n"))
 	if strings.Contains(u, "mailto") {
 		return "", errIsMailTo
 	}
+
 	if strings.Contains(u, "#") {
 		return "", errIsAnchor
 	}
+
 	t, err := url.Parse(u)
 	if err != nil {
 		return "", err
@@ -364,6 +367,7 @@ func (c *Crawler) normalizeURL(u string) (string, error) {
 		t.Scheme = m.Scheme
 	}
 
+	// check doamin
 	if c.IncludeSubDomains {
 		if !strings.Contains(t.Host, m.Host) {
 			return "", errAnotherDomain
@@ -392,17 +396,18 @@ func (c *Crawler) getOutputFileNameByURL(u string) (string, error) {
 		t.Host = m.Host
 	}
 
-	if t.Path != "" {
-		_, file := filepath.Split(t.Path)
-		if file == "" || !strings.Contains(file, ".") || file == t.Host {
-			if t.Path[len(t.Path)-1] == '/' {
-				t.Path += "index.html"
-			} else {
-				t.Path += "/index.html"
-			}
-		}
-	} else {
-		t.Path = "/index.html"
+	if t.Path == "" {
+		return t.Host + "/index.html", nil
 	}
-	return t.Host + t.Path, nil
+
+	name := t.Host + t.Path
+	_, file := filepath.Split(t.Path)
+	if file == "" || !strings.Contains(file, ".") || file == t.Host {
+		if t.Path[len(t.Path)-1] == '/' {
+			return name + "index.html", nil
+		}
+		return name + "/index.html", nil
+	}
+
+	return name, nil
 }
