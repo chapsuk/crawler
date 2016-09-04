@@ -103,3 +103,35 @@ result/golang-book.ru/
 
 1 directory, 16 files
 ```
+
+with storage
+```
+$ time ./crawler -h http://golang-book.ru
+2016/09/04 18:24:24 Completed! Time: 384.972384ms
+0.39 real
+0.11 user
+0.03 sys
+...
+crawler=# select * from "golang-book.ru";
+                             url                              | type | status |          created           |          updated
+--------------------------------------------------------------+------+--------+----------------------------+----------------------------
+ http://golang-book.ru                                        |    1 |      3 | 2016-09-04 15:24:24.155024 | 2016-09-04 15:24:24.265518
+ http://golang-book.ru/chapter-01-gettting-started.html       |    1 |      3 | 2016-09-04 15:24:24.25395  | 2016-09-04 15:24:24.321782
+ http://golang-book.ru/chapter-02-your-first-program.html     |    1 |      3 | 2016-09-04 15:24:24.277237 | 2016-09-04 15:24:24.371623
+ http://golang-book.ru/chapter-03-types.html                  |    1 |      3 | 2016-09-04 15:24:24.280468 | 2016-09-04 15:24:24.388519
+ http://golang-book.ru/chapter-04-variables.html              |    1 |      3 | 2016-09-04 15:24:24.281972 | 2016-09-04 15:24:24.39923
+ http://golang-book.ru/chapter-10-concurrency.html            |    1 |      3 | 2016-09-04 15:24:24.291129 | 2016-09-04 15:24:24.423001
+ http://golang-book.ru/chapter-05-control-structures.html     |    1 |      3 | 2016-09-04 15:24:24.283473 | 2016-09-04 15:24:24.433296
+ http://golang-book.ru/chapter-09-structs-and-interfaces.html |    1 |      3 | 2016-09-04 15:24:24.289616 | 2016-09-04 15:24:24.441851
+ http://golang-book.ru/assets/main.css                        |    2 |      3 | 2016-09-04 15:24:24.299716 | 2016-09-04 15:24:24.450094
+ http://golang-book.ru/chapter-07-functions.html              |    1 |      3 | 2016-09-04 15:24:24.286585 | 2016-09-04 15:24:24.458055
+ http://golang-book.ru/chapter-11-packages.html               |    1 |      3 | 2016-09-04 15:24:24.292562 | 2016-09-04 15:24:24.466465
+ http://golang-book.ru/chapter-08-pointers.html               |    1 |      3 | 2016-09-04 15:24:24.288143 | 2016-09-04 15:24:24.474569
+ http://golang-book.ru/chapter-06-arrays-slices-maps.html     |    1 |      3 | 2016-09-04 15:24:24.285088 | 2016-09-04 15:24:24.481355
+ http://golang-book.ru/chapter-14-next-steps.html             |    1 |      3 | 2016-09-04 15:24:24.298188 | 2016-09-04 15:24:24.488203
+ http://golang-book.ru/chapter-12-testing.html                |    1 |      3 | 2016-09-04 15:24:24.294398 | 2016-09-04 15:24:24.494819
+ http://golang-book.ru/chapter-13-core-packages.html          |    1 |      3 | 2016-09-04 15:24:24.296463 | 2016-09-04 15:24:24.503753
+ http://golang-book.ru/                                       |    1 |      3 | 2016-09-04 15:24:24.316739 | 2016-09-04 15:24:24.511351
+(17 rows)
+
+```

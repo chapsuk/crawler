@@ -46,6 +46,14 @@ func NewState(s Storage) *State {
 	}
 }
 
+// Close call storage close is storage not nil
+func (s *State) Close() error {
+	if s.storage != nil {
+		return s.storage.Close()
+	}
+	return nil
+}
+
 // SetEmpty flag, if state is empty crawler run proccess from main url
 func (s *State) SetEmpty(b bool) {
 	s.empty = b
@@ -106,13 +114,21 @@ func (s *State) IsSaved(url string) bool {
 
 // GetInflight return inFlight items
 func (s *State) GetInflight() map[string]Item {
-	var res map[string]Item
+	res := make(map[string]Item)
 	for k, v := range s.progress {
 		if v.status == InFlightStatus {
 			res[k] = v
 		}
 	}
 	return res
+}
+
+// AddProgress item
+func (s *State) AddProgress(url string, i Item) {
+	if i.status == InFlightStatus {
+		s.wg.Add(1)
+	}
+	s.progress[url] = i
 }
 
 // WaiteAll call waite work group

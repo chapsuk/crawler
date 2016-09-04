@@ -87,7 +87,6 @@ func New(h, o string, s *State) (*Crawler, error) {
 
 // Run crawler proccess
 func (c *Crawler) Run() {
-	defer c.close()
 	c.runWorkers()
 
 	// if state empty start from main url
@@ -97,9 +96,9 @@ func (c *Crawler) Run() {
 		for url, i := range c.state.GetInflight() {
 			switch i.itype {
 			case PageType:
-				c.enqueUploadPage(url)
+				go func(u string) { c.uploadPageCh <- u }(url)
 			case AssetType:
-				c.enqueUploadAsset(url)
+				go func(u string) { c.uploadAssetCh <- u }(url)
 			default:
 				log.Printf("undefined type: %d from state", i.itype)
 			}
@@ -144,19 +143,22 @@ func (c *Crawler) runWorkers() {
 	}
 }
 
-func (c *Crawler) close() {
+// Close channels and state
+func (c *Crawler) Close() {
 	close(c.uploadAssetCh)
 	close(c.uploadPageCh)
 	close(c.saveCh)
+	err := c.state.Close()
+	if err != nil {
+		log.Printf("close state error: %s", err)
+	}
 }
 
 func (c *Crawler) serveUploadPage() {
 	for {
 		url := <-c.uploadPageCh
 		if url == "" {
-			log.Printf("gotten empty url")
-			c.state.MarkAsIgnored(url, PageType)
-			continue
+			return
 		}
 
 		req, err := craeteRequest(url)
@@ -210,9 +212,7 @@ func (c *Crawler) serveUploadAsset() {
 	for {
 		url := <-c.uploadAssetCh
 		if url == "" {
-			log.Printf("empty asset url")
-			c.state.MarkAsIgnored(url, AssetType)
-			continue
+			return
 		}
 
 		res, err := http.Get(url)
@@ -236,11 +236,11 @@ func (c *Crawler) serveUploadAsset() {
 func (c *Crawler) serveSave() {
 	for {
 		f := <-c.saveCh
-
 		name, err := c.getOutputFileNameByURL(f.GetPath())
 		if err != nil {
 			log.Printf("get file name for url: %s, error: %s", f.GetPath(), err)
 			c.state.MarkAsIgnored(f.GetPath(), f.GetType())
+			f.Free()
 			continue
 		}
 		path := c.output + name
@@ -252,6 +252,7 @@ func (c *Crawler) serveSave() {
 			if err != nil {
 				log.Printf("craete dir: %s error: %s", dir, err)
 				c.state.MarkAsIgnored(f.GetPath(), f.GetType())
+				f.Free()
 				continue
 			}
 		}

@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"log"
+	"net/url"
 	"os"
+	"time"
 
 	"github.com/chapsuk/crawler"
 )
@@ -15,10 +17,12 @@ var (
 	resume   = flag.Bool("r", false, "resume upload")
 	subdom   = flag.Bool("s", false, "include subdomains")
 	gzip     = flag.Bool("g", true, "enable gzip")
+	db       = flag.String("d", "postgres://postgres:postgres@127.0.0.1:1720/crawler?sslmode=disable", "db connections string")
 )
 
 func main() {
 	flag.Parse()
+	start := time.Now()
 
 	if *endpoint == "" || *out == "" {
 		flag.PrintDefaults()
@@ -29,17 +33,45 @@ func main() {
 		log.Panic(err)
 	}
 
-	state := crawler.NewState(nil)
+	m, err := url.Parse(*endpoint)
+	if err != nil {
+		log.Panicf("parse %s error: %s", *endpoint, err)
+	}
+
+	strg, err := crawler.NewPGStorage(*db, m.Host)
+	if err != nil {
+		log.Printf("create storage error: %s", err)
+		strg = nil
+	}
+
+	var state *crawler.State
+	if strg == nil {
+		state = crawler.NewState(nil)
+	} else if *resume {
+		state, err = strg.Load()
+		if err != nil {
+			log.Panicf("load state error: %s", err)
+		}
+	} else {
+		state, err = strg.Clear()
+		if err != nil {
+			log.Panicf("clear state error: %s", err)
+		}
+	}
+
 	c, err := crawler.New(*endpoint, *out, state)
 	if err != nil {
 		log.Panic(err)
 	}
+	defer c.Close()
 
 	c.IncludeSubDomains = *subdom
 	c.SaveWorkers = *workers
 	c.UploadWorkers = *workers
 	c.EnableGzip = *gzip
 	c.Run()
+
+	log.Printf("Completed! Time: %s", time.Now().Sub(start).String())
 }
 
 func createOutput(path string) error {
