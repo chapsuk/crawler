@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -51,6 +53,8 @@ type Crawler struct {
 	vmu sync.Mutex
 	smu sync.Mutex
 	wg  sync.WaitGroup
+
+	httpClient *http.Client
 }
 
 // New return new Crawler instance
@@ -68,6 +72,17 @@ func New(h, o string, r bool) *Crawler {
 		SaveWorkers:       DefaultWorkersCount,
 		IncludeSubDomains: false,
 		EnableGzip:        true,
+		httpClient: &http.Client{
+			Transport: &http.Transport{
+				Dial: (&net.Dialer{
+					Timeout:   15 * time.Second,
+					KeepAlive: 180 * time.Second,
+				}).Dial,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 10 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
+		},
 	}
 }
 
@@ -132,7 +147,14 @@ func (c *Crawler) serveUploadPage() {
 			continue
 		}
 
-		res, err := http.Get(url)
+		req, err := craeteRequest(url)
+		if err != nil {
+			log.Printf("create request error: %s", err)
+			c.wg.Done()
+			continue
+		}
+
+		res, err := c.httpClient.Do(req)
 		if err != nil {
 			log.Printf("http get: %s, error: %s", url, err)
 			c.wg.Done()
@@ -262,6 +284,15 @@ func (c *Crawler) serveSave() {
 		c.wg.Done()
 		f.Free()
 	}
+}
+
+// todo add cancelation context
+func craeteRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return req, err
 }
 
 func (c *Crawler) addVisited(url string) error {
