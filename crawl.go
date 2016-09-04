@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -13,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -30,12 +28,12 @@ var (
 type File interface {
 	GetPath() string
 	GetBody() []byte
+	GetType() ItemType
 	Free()
 }
 
 type Crawler struct {
 	endpoint string
-	mainURL  *url.URL
 	output   string
 
 	UploadWorkers     int
@@ -43,22 +41,17 @@ type Crawler struct {
 	EnableGzip        bool
 	IncludeSubDomains bool
 
-	saved   map[string]bool
-	visited map[string]bool
-
 	uploadPageCh  chan string
 	uploadAssetCh chan string
 	saveCh        chan File
 
-	vmu sync.Mutex
-	smu sync.Mutex
-	wg  sync.WaitGroup
-
+	mainURL    *url.URL
+	state      *State
 	httpClient *http.Client
 }
 
 // New return new Crawler instance
-func New(h, o string) (*Crawler, error) {
+func New(h, o string, s *State) (*Crawler, error) {
 	m, err := url.Parse(h)
 	if err != nil {
 		return nil, err
@@ -70,8 +63,6 @@ func New(h, o string) (*Crawler, error) {
 		endpoint:          h,
 		mainURL:           m,
 		output:            o,
-		saved:             make(map[string]bool),
-		visited:           make(map[string]bool),
 		uploadPageCh:      make(chan string, 1024),
 		uploadAssetCh:     make(chan string, 1024),
 		saveCh:            make(chan File, 128),
@@ -79,6 +70,7 @@ func New(h, o string) (*Crawler, error) {
 		SaveWorkers:       DefaultWorkersCount,
 		IncludeSubDomains: false,
 		EnableGzip:        true,
+		state:             s,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
@@ -94,30 +86,50 @@ func New(h, o string) (*Crawler, error) {
 }
 
 // Run crawler proccess
-func (c *Crawler) Run(resume bool) {
+func (c *Crawler) Run() {
 	defer c.close()
 	c.runWorkers()
-	c.enqueUploadPage(c.endpoint)
-	c.wg.Wait()
+
+	// if state empty start from main url
+	if c.state.IsEmpty() {
+		c.enqueUploadPage(c.endpoint)
+	} else {
+		for url, i := range c.state.GetInflight() {
+			switch i.itype {
+			case PageType:
+				c.enqueUploadPage(url)
+			case AssetType:
+				c.enqueUploadAsset(url)
+			default:
+				log.Printf("undefined type: %d from state", i.itype)
+			}
+		}
+	}
+	c.state.WaiteAll()
 }
 
 func (c *Crawler) enqueUploadPage(url string) {
-	if !c.isVisited(url) {
-		c.wg.Add(1)
-		go func() { c.uploadPageCh <- url }()
+	if err := c.state.MarkAsInFlight(url, PageType); err != nil {
+		if err != errHasMoreOrEqualStatus {
+			log.Printf("enqueUploadPage, mark as in flight error: %s", err)
+		}
+		return
 	}
+	go func() { c.uploadPageCh <- url }()
 }
 
 func (c *Crawler) enqueUploadAsset(url string) {
-	if !c.isVisited(url) {
-		c.wg.Add(1)
-		go func() { c.uploadAssetCh <- url }()
+	if err := c.state.MarkAsInFlight(url, AssetType); err != nil {
+		if err != errHasMoreOrEqualStatus {
+			log.Printf("enqueUploadAsset, mark as in flight error: %s", err)
+		}
+		return
 	}
+	go func() { c.uploadAssetCh <- url }()
 }
 
 func (c *Crawler) enqueSave(f File) {
-	if !c.isSaved(f.GetPath()) {
-		c.wg.Add(1)
+	if !c.state.IsSaved(f.GetPath()) {
 		go func() { c.saveCh <- f }()
 	}
 }
@@ -143,35 +155,28 @@ func (c *Crawler) serveUploadPage() {
 		url := <-c.uploadPageCh
 		if url == "" {
 			log.Printf("gotten empty url")
-			c.wg.Done()
-			continue
-		}
-
-		err := c.addVisited(url)
-		if err != nil {
-			// error only if visited before
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, PageType)
 			continue
 		}
 
 		req, err := craeteRequest(url)
 		if err != nil {
 			log.Printf("create request error: %s", err)
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, PageType)
 			continue
 		}
 
 		res, err := c.httpClient.Do(req)
 		if err != nil {
 			log.Printf("http get: %s, error: %s", url, err)
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, PageType)
 			continue
 		}
 
 		page, err := NewPage(url, res)
 		if err != nil {
 			log.Printf("create page error: %s", err)
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, PageType)
 			continue
 		}
 
@@ -198,7 +203,6 @@ func (c *Crawler) serveUploadPage() {
 			}
 			c.enqueUploadAsset(u)
 		}
-		c.wg.Done()
 	}
 }
 
@@ -207,38 +211,25 @@ func (c *Crawler) serveUploadAsset() {
 		url := <-c.uploadAssetCh
 		if url == "" {
 			log.Printf("empty asset url")
-			c.wg.Done()
-			continue
-		}
-
-		err := c.addVisited(url)
-		if err != nil {
-			// error only if visited before
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, AssetType)
 			continue
 		}
 
 		res, err := http.Get(url)
 		if err != nil {
-			// todo handle http errors and:
-			//   - remove visited flags and push to upload channel
-			// or
-			//   - wg.Done() and continue
 			log.Printf("http get: %s, error: %s", url, err)
-			c.removeVisited(url)
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, AssetType)
 			continue
 		}
 
 		asset, err := NewAsset(url, res)
 		if err != nil {
 			log.Printf("create asset error: %s", err)
-			c.wg.Done()
+			c.state.MarkAsIgnored(url, AssetType)
 			continue
 		}
 
 		c.enqueSave(asset)
-		c.wg.Done()
 	}
 }
 
@@ -246,18 +237,10 @@ func (c *Crawler) serveSave() {
 	for {
 		f := <-c.saveCh
 
-		err := c.addSaved(f.GetPath())
-		if err != nil {
-			c.wg.Done()
-			f.Free()
-			continue
-		}
-
 		name, err := c.getOutputFileNameByURL(f.GetPath())
 		if err != nil {
 			log.Printf("get file name for url: %s, error: %s", f.GetPath(), err)
-			c.wg.Done()
-			f.Free()
+			c.state.MarkAsIgnored(f.GetPath(), f.GetType())
 			continue
 		}
 		path := c.output + name
@@ -268,8 +251,7 @@ func (c *Crawler) serveSave() {
 			err = os.MkdirAll(dir, 0744)
 			if err != nil {
 				log.Printf("craete dir: %s error: %s", dir, err)
-				c.wg.Done()
-				f.Free()
+				c.state.MarkAsIgnored(f.GetPath(), f.GetType())
 				continue
 			}
 		}
@@ -289,7 +271,7 @@ func (c *Crawler) serveSave() {
 			log.Printf("wrte file error: %s", err)
 		}
 
-		c.wg.Done()
+		c.state.MarkAsSaved(f.GetPath(), f.GetType())
 		f.Free()
 	}
 }
@@ -301,52 +283,6 @@ func craeteRequest(url string) (*http.Request, error) {
 		return nil, err
 	}
 	return req, err
-}
-
-func (c *Crawler) addVisited(url string) error {
-	c.vmu.Lock()
-	defer c.vmu.Unlock()
-	if _, ok := c.visited[url]; ok {
-		return fmt.Errorf("fail add visited url %s, visited before", url)
-	}
-	c.visited[url] = true
-	return nil
-}
-
-func (c *Crawler) isVisited(url string) bool {
-	c.vmu.Lock()
-	defer c.vmu.Unlock()
-	if v, ok := c.visited[url]; ok {
-		return v
-	}
-	return false
-}
-
-func (c *Crawler) removeVisited(url string) error {
-	c.vmu.Lock()
-	defer c.vmu.Unlock()
-	if _, ok := c.visited[url]; ok {
-		c.visited[url] = false
-		return nil
-	}
-	return fmt.Errorf("not visited url: %s", url)
-}
-
-func (c *Crawler) addSaved(url string) error {
-	c.smu.Lock()
-	defer c.smu.Unlock()
-	if _, ok := c.saved[url]; ok {
-		return fmt.Errorf("fail add saved url %s, saved before", url)
-	}
-	c.saved[url] = true
-	return nil
-}
-
-func (c *Crawler) isSaved(url string) bool {
-	c.smu.Lock()
-	defer c.smu.Unlock()
-	_, ok := c.saved[url]
-	return ok
 }
 
 func (c *Crawler) normalizeURL(u string) (string, error) {

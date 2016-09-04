@@ -57,6 +57,11 @@ func (p *Page) Free() {
 	p.body = nil
 }
 
+// GetType return page type
+func (p *Page) GetType() ItemType {
+	return PageType
+}
+
 func parseDoc(doc *goquery.Document) (pages []string, assets []string) {
 	doc.Find("a").Each(func(i int, s *goquery.Selection) {
 		p, ok := s.Attr("href")

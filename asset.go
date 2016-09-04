@@ -33,3 +33,8 @@ func (a *Asset) GetPath() string {
 func (a *Asset) Free() {
 	a.body = nil
 }
+
+// GetType return asset type
+func (a *Asset) GetType() ItemType {
+	return AssetType
+}

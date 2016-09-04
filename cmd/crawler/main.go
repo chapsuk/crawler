@@ -29,7 +29,8 @@ func main() {
 		log.Panic(err)
 	}
 
-	c, err := crawler.New(*endpoint, *out)
+	state := crawler.NewState(nil)
+	c, err := crawler.New(*endpoint, *out, state)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -38,7 +39,7 @@ func main() {
 	c.SaveWorkers = *workers
 	c.UploadWorkers = *workers
 	c.EnableGzip = *gzip
-	c.Run(*resume)
+	c.Run()
 }
 
 func createOutput(path string) error {
