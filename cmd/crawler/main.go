@@ -17,7 +17,7 @@ var (
 	resume   = flag.Bool("r", false, "resume upload")
 	subdom   = flag.Bool("s", false, "include subdomains")
 	gzip     = flag.Bool("g", true, "enable gzip")
-	db       = flag.String("d", "postgres://postgres:postgres@127.0.0.1:1720/crawler?sslmode=disable", "db connections string")
+	db       = flag.String("d", "postgres://postgres:postgres@postgres/crawler?sslmode=disable", "db connections string")
 )
 
 func main() {
@@ -38,24 +38,28 @@ func main() {
 		log.Panicf("parse %s error: %s", *endpoint, err)
 	}
 
-	strg, err := crawler.NewPGStorage(*db, m.Host)
-	if err != nil {
-		log.Printf("create storage error: %s", err)
-		strg = nil
-	}
-
 	var state *crawler.State
-	if strg == nil {
+	if *db == "" {
 		state = crawler.NewState(nil)
-	} else if *resume {
-		state, err = strg.Load()
-		if err != nil {
-			log.Panicf("load state error: %s", err)
-		}
 	} else {
-		state, err = strg.Clear()
+		strg, err := crawler.NewPGStorage(*db, m.Host)
 		if err != nil {
-			log.Panicf("clear state error: %s", err)
+			log.Printf("create storage error: %s", err)
+			strg = nil
+		}
+
+		if strg == nil {
+			state = crawler.NewState(nil)
+		} else if *resume {
+			state, err = strg.Load()
+			if err != nil {
+				log.Panicf("load state error: %s", err)
+			}
+		} else {
+			state, err = strg.Clear()
+			if err != nil {
+				log.Panicf("clear state error: %s", err)
+			}
 		}
 	}
 

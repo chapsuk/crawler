@@ -16,6 +16,16 @@
 			"Rev": "1c31af6f6c1a7b101ed05aacc7d8a738b43ae86e"
 		},
 		{
+			"ImportPath": "github.com/lib/pq",
+			"Comment": "go1.0-cutoff-107-g4dd446e",
+			"Rev": "4dd446efc17690bc53e154025146f73203b18309"
+		},
+		{
+			"ImportPath": "github.com/lib/pq/oid",
+			"Comment": "go1.0-cutoff-107-g4dd446e",
+			"Rev": "4dd446efc17690bc53e154025146f73203b18309"
+		},
+		{
 			"ImportPath": "golang.org/x/net/html",
 			"Rev": "b400c2eff1badec7022a8c8f5bea058b6315eed7"
 		},

@@ -1,6 +1,5 @@
 # Task
 
-
 Задача:
 
 * Реализовать web-crawler, рекурсивно скачивающий сайт (идущий по ссылкам вглубь). 
@@ -9,6 +8,40 @@
 * Crawler должен сжимать скачанные документы перед сохранением  (gzip)
 * Crawler должен грузить только текстовые документы -   html, css, js (картинки, видео игнорировать)
 * Crawler должен грузить документы только одного домена (игнорировать сторонние ссылки)
+
+## Флаги запуска
+
+```
+  -d string
+       	db connections string (default "postgres://postgres:postgres@postgres/crawler?sslmode=disable")
+  -g bool
+    	enable gzip (default true)
+  -h string
+       	base endpoint (default "https://github.com/chapsuk")
+  -o string
+       	output path (default "./result/")
+  -r bool
+    	resume upload
+  -s bool
+    	include subdomains
+  -w int
+       	workers count (default 150)
+```
+
+## Запуск
+
+### Docker
+
+Из текущей дерриктории выполняем `docker-compose up -d`, в первый раз будет собран контейнер с приложением,
+после сборки запустится контейнер postgres и контейнер с приложением. Postgres нужен для поддержки дозакачки.
+Результат выполнения можно посмотреть в `./result/`. Флагами запуска можно поиграться [тут](docker-compose.yml#L10).  
+
+### Local
+
+```
+go run cmd/crawler/main.go -h http://golang-book.ru -d ""
+```
+для использования дозагрузки, надо приконектится к какому то постгресу, строку коннекта передавать через флаг `-d`.
 
 ## crawler vs wget (without storage)
 
@@ -135,3 +168,5 @@ crawler=# select * from "golang-book.ru";
 (17 rows)
 
 ```
+
+![](https://media.giphy.com/media/xTiTnKH3dDw1ww53R6/giphy.gif)

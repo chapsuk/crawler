@@ -1,12 +1,26 @@
 version: '2'
 
 services:
+  
+  app:
+    build: .
+    image: chapsuk/crawler
+    networks:
+      - crawler-net
+    command: -h http://golang-book.ru -o /data/
+    volumes:
+      - ./result/:/data/
 
   db:
     image: postgres:9.6
-    ports:
-      - "1720:5432"
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
-      POSTGRES_DB: crawler  
+      POSTGRES_DB: crawler
+    networks:
+      crawler-net:
+        aliases:
+          - postgres
+
+networks:
+  crawler-net:
