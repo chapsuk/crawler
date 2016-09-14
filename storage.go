@@ -84,16 +84,7 @@ func (pgs *PGStorage) Clear() (*State, error) {
 func (pgs *PGStorage) SetStatus(url string, t ItemType, s Status) error {
 	_, err := pgs.db.Exec(pgs.getQuery(querySetStatus), url, t, s)
 	if err != nil {
-		if pgerr, ok := err.(*pq.Error); ok {
-			if pgerr.Code == "23505" {
-				_, err = pgs.db.Query(pgs.getQuery(queryUpdateStatus), s, url)
-				if err != nil {
-					log.Printf("update status error: %#v", err)
-				}
-			}
-		} else {
-			log.Printf("set status error: %#v", err)
-		}
+		log.Printf("set status error: %#v", err)
 	}
 	return err
 }

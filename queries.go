@@ -18,15 +18,7 @@ INSERT INTO "%s" (
     url,
     type,
     status
-) VALUES ($1, $2, $3);
-`
-	queryUpdateStatus = `
-UPDATE "%s"
-SET
-    status = $1,
-    updated = now()
-WHERE
-    url = $2;
+) VALUES ($1, $2, $3) ON CONFLICT(url) DO UPDATE SET status = $3;
 `
 	queryGetAll = `
 SELECT url, type, status FROM "%s";
