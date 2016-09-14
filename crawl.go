@@ -182,8 +182,6 @@ func (c *Crawler) serveUploadPage() {
 			continue
 		}
 
-		c.enqueSave(page)
-
 		for _, purl := range page.Pages {
 			u, err := c.normalizeURL(purl)
 			if err != nil {
@@ -205,6 +203,8 @@ func (c *Crawler) serveUploadPage() {
 			}
 			c.enqueUploadAsset(u)
 		}
+
+		c.enqueSave(page)
 	}
 }
 
